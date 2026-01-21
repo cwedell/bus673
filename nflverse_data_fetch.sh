@@ -1,5 +1,6 @@
+# Download
 set -euo pipefail
-BUCKET="gs://nflverse_data/"
+BUCKET="gs://nflverse_data"
 YEARS=("1999" "2000" "2001" "2002" "2003" "2004" "2005" "2006" "2007" "2008" "2009" "2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023" "2024" "2025")
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
@@ -23,5 +24,40 @@ for YEAR in "${YEARS[@]}"; do
 done
 echo "" | tee -a "$LOG_FILE"
 echo "Uploaded files:" | tee -a "$LOG_FILE"
-gsutil ls -l "${BUCKET}/${DEST_PREFIX}/" | tee -a "$LOG_FILE"
+gsutil ls -l "${BUCKET}/" | tee -a "$LOG_FILE"
 echo "DONE." | tee -a "$LOG_FILE"
+
+# Load to BigQuery
+PROJECT_ID="my-673-project"
+BQ_DATASET="NFLverse_dataset"
+BQ_TABLE_PREFIX="play_by_play_"
+
+echo "============================================================"
+echo "BigQuery load (from existing GCS Parquet)"
+echo "Project : ${PROJECT_ID}"
+echo "Dataset : ${BQ_DATASET}"
+echo "Bucket  : ${BUCKET}"
+echo "Years   : ${YEARS[*]}"
+echo "============================================================"
+
+for Y in "${YEARS[@]}"; do
+  OBJECT="${BUCKET}/play_by_play_${Y}.parquet"
+  TABLE="${PROJECT_ID}:${BQ_DATASET}.${BQ_TABLE_PREFIX}${Y}"
+
+  echo "----------------------------------------"
+  echo "Year : ${Y}"
+  echo "GCS  : ${OBJECT}"
+  echo "BQ   : ${TABLE}"
+
+  bq load \
+    --location="us-west1" \
+    --replace \
+    --source_format=PARQUET \
+    "${TABLE}" \
+    "${OBJECT}"
+
+  # Quick check
+  bq head -n 3 "${TABLE}" || true
+done
+
+echo "Done loading to BigQuery"
